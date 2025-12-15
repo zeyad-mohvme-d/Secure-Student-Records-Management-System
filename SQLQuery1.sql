@@ -7,3 +7,6 @@ Create Table students(
 	);
 
 insert into students values ('Khaled');
+
+
+insert into students values ('Zeyad');
