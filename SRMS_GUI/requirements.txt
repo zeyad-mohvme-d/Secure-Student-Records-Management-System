@@ -1,0 +1,3 @@
+Install : 
+
+pyodbc  -> pip install pyodbc
