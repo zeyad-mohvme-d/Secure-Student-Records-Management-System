@@ -1,5 +1,5 @@
 /* ============================================================
-   Database Security – Term Project (Phase 2)
+   Database Security â€“ Term Project (Phase 2)
    Secure Student Records Management System (SRMS)
    Implements:
    - Schema: STUDENT, INSTRUCTOR, COURSE, GRADES, ATTENDANCE, USERS  (PDF Sec. 3) :contentReference[oaicite:1]{index=1}
@@ -295,7 +295,7 @@ BEGIN
     IF @role NOT IN ('Admin','Instructor','TA')
         THROW 50006, 'Access denied: Only Admin/Instructor/TA can edit profile.', 1;
 
-    -- MLS: No Write Down (BONUS) — Confidential target=2; block clearance >2 writing down
+    -- MLS: No Write Down (BONUS) â€” Confidential target=2; block clearance >2 writing down
     IF @clr > 2
         THROW 50007, 'MLS NWD: higher clearance cannot write to lower classification.', 1;
 
@@ -310,7 +310,7 @@ BEGIN
 END
 GO
 
-/* ===== Grades (Secret) — view/edit only Admin & Instructor (matrix) :contentReference[oaicite:20]{index=20} ===== */
+/* ===== Grades (Secret) â€” view/edit only Admin & Instructor (matrix) :contentReference[oaicite:20]{index=20} ===== */
 CREATE OR ALTER PROCEDURE dbo.usp_EnterOrUpdateGrade
     @Username NVARCHAR(50),
     @StudentID INT,
@@ -330,7 +330,7 @@ BEGIN
     IF @clr < 3
         THROW 50009, 'MLS NRU: insufficient clearance for Secret grades.', 1;
 
-    -- MLS: No Write Down (BONUS) — target Secret=3; block clearance >3 writing down
+    -- MLS: No Write Down (BONUS) â€” target Secret=3; block clearance >3 writing down
     IF @clr > 3
         THROW 50010, 'MLS NWD: higher clearance cannot write to lower classification.', 1;
 
@@ -385,7 +385,7 @@ BEGIN
 END
 GO
 
-/* ===== Attendance (Secret) — view/edit Admin/Instructor/TA; Student own view only (matrix) :contentReference[oaicite:22]{index=22} ===== */
+/* ===== Attendance (Secret) â€” view/edit Admin/Instructor/TA; Student own view only (matrix) :contentReference[oaicite:22]{index=22} ===== */
 CREATE OR ALTER PROCEDURE dbo.usp_RecordAttendance
     @Username NVARCHAR(50),
     @StudentID INT,
@@ -404,7 +404,7 @@ BEGIN
     IF @clr < 3
         THROW 50014, 'MLS NRU: insufficient clearance for Secret attendance.', 1;
 
-    -- MLS: No Write Down (BONUS) — target Secret=3; block clearance >3 writing down
+    -- MLS: No Write Down (BONUS) â€” target Secret=3; block clearance >3 writing down
     IF @clr > 3
         THROW 50015, 'MLS NWD: higher clearance cannot write to lower classification.', 1;
 
@@ -536,14 +536,14 @@ GO
 ---------------------------------------------------------------
 
 ---------------------------------------------------------------
--- TASK 8: MLS (Bell–LaPadula NRU + NWD bonus) (PDF 4.4) :contentReference[oaicite:27]{index=27}
+-- TASK 8: MLS (Bellâ€“LaPadula NRU + NWD bonus) (PDF 4.4) :contentReference[oaicite:27]{index=27}
 -- Implemented inside procedures:
 -- - NRU: clearance check before reading confidential/secret
 -- - NWD bonus: block writing to lower classification targets
 ---------------------------------------------------------------
 
 ---------------------------------------------------------------
--- TASK 9: Part B – Role Upgrade Request Workflow (PDF Part B) :contentReference[oaicite:28]{index=28}
+-- TASK 9: Part B â€“ Role Upgrade Request Workflow (PDF Part B) :contentReference[oaicite:28]{index=28}
 ---------------------------------------------------------------
 
 CREATE TABLE dbo.RoleRequests (
