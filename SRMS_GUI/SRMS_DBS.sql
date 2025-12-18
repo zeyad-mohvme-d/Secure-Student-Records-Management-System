@@ -581,6 +581,27 @@ VALUES (
 
 
 
+
+OPEN SYMMETRIC KEY SRMS_AES_Key
+DECRYPTION BY CERTIFICATE SRMS_Cert;
+
+INSERT INTO dbo.Student
+(StudentID_Enc, FullName, Email, PhoneEnc, DOB, Department, ClearanceLevel)
+VALUES (
+    EncryptByKey(Key_GUID('SRMS_AES_Key'), CONVERT(VARBINARY(20), '1000')),
+    'Zeyad Student',
+    'stud2',
+    EncryptByKey(Key_GUID('SRMS_AES_Key'), CONVERT(VARBINARY(20), '555-5555')),
+    '2000-01-01',
+    'Computer Science',
+    2
+);
+
+CLOSE SYMMETRIC KEY SRMS_AES_Key;
+
+
+
+
 -- Course
 INSERT INTO dbo.Course VALUES (101, 'Database Security', 'Secure DB design', 'Open to all');
 
@@ -607,7 +628,7 @@ GO
 
 
 
-SELECT * FROM Users;
+SELECT * FROM Student;
 
 ---------------------------------testing---------------------------------------
 ----Login works
