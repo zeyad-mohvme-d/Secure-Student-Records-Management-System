@@ -10,6 +10,8 @@
 ---------------------------------------------------------------
 -- TASK 0: Create Database
 ---------------------------------------------------------------
+USE [master];
+
 IF DB_ID('SRMS_DB') IS NOT NULL
 BEGIN
     ALTER DATABASE SRMS_DB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
@@ -25,7 +27,7 @@ GO
 ---------------------------------------------------------------
 -- TASK 1: Encryption Setup (AES)
 ---------------------------------------------------------------
-CREATE MASTER KEY ENCRYPTION BY PASSWORD = 'SRMS_MasterKey_StrongPassword_!2025';
+CREATE MASTER KEY ENCRYPTION BY PASSWORD = 'Yassin!2025';
 GO
 
 CREATE CERTIFICATE SRMS_Cert
@@ -99,7 +101,7 @@ CREATE TABLE dbo.Attendance (
 GO
 
 -- USERS (Authentication)
-CREATE TABLE dbo.[Users] (
+CREATE TABLE dbo.Users (
     Username        NVARCHAR(50)   NOT NULL PRIMARY KEY,  -- e.g., email for students
     PasswordEnc     VARBINARY(256) NOT NULL,
     RoleName        NVARCHAR(20)   NOT NULL CHECK (RoleName IN ('Admin','Instructor','TA','Student','Guest')),
@@ -124,33 +126,33 @@ GO
 ---------------------------------------------------------------
 -- TASK 4: Helper Functions
 ---------------------------------------------------------------
-CREATE OR ALTER FUNCTION dbo.fn_UserRole(@Username NVARCHAR(50))
+CREATE OR ALTER FUNCTION UserRole(@Username NVARCHAR(50))
 RETURNS NVARCHAR(20)
 AS
 BEGIN
     DECLARE @r NVARCHAR(20);
-    SELECT @r = RoleName FROM dbo.[Users] WHERE Username = @Username;
+    SELECT @r = RoleName FROM Users WHERE Username = @Username;
     RETURN @r;
 END
 GO
 
-CREATE OR ALTER FUNCTION dbo.fn_UserClearance(@Username NVARCHAR(50))
+CREATE OR ALTER FUNCTION UserClearance(@Username NVARCHAR(50))
 RETURNS INT
 AS
 BEGIN
     DECLARE @c INT;
-    SELECT @c = ClearanceLevel FROM dbo.[Users] WHERE Username = @Username;
+    SELECT @c = ClearanceLevel FROM dbo.Users WHERE Username = @Username;
     RETURN @c;
 END
 GO
 
 -- Helper: Get Student SurrogateID from Username (for Students)
-CREATE OR ALTER FUNCTION dbo.fn_GetStudentSurrogateID(@Username NVARCHAR(50))
+CREATE OR ALTER FUNCTION GetStudentSurrogateID(@Username NVARCHAR(50))
 RETURNS INT
 AS
 BEGIN
     DECLARE @sid INT;
-    SELECT @sid = SurrogateID FROM dbo.Student WHERE Email = @Username;
+    SELECT @sid = SurrogateID FROM Student WHERE Email = @Username;
     RETURN @sid;
 END
 GO
@@ -160,7 +162,7 @@ GO
 ---------------------------------------------------------------
 
 -- Authentication
-CREATE OR ALTER PROCEDURE dbo.usp_CreateUser
+CREATE OR ALTER PROCEDURE CreateUser
     @AdminUser     NVARCHAR(50),
     @Username      NVARCHAR(50),
     @PlainPassword NVARCHAR(200),
@@ -169,15 +171,26 @@ CREATE OR ALTER PROCEDURE dbo.usp_CreateUser
 AS
 BEGIN
     SET NOCOUNT ON;
-    IF dbo.fn_UserRole(@AdminUser) <> 'Admin' THROW 50001, 'Admin only.', 1;
+
+    IF dbo.UserRole(@AdminUser) <> 'Admin'
+    BEGIN
+        THROW 50001, 'Admin only.', 1;
+    END
+
     OPEN SYMMETRIC KEY SRMS_AES_Key DECRYPTION BY CERTIFICATE SRMS_Cert;
-    INSERT INTO dbo.[Users](Username, PasswordEnc, RoleName, ClearanceLevel)
-    VALUES (@Username, EncryptByKey(Key_GUID('SRMS_AES_Key'), CONVERT(VARBINARY(200), @PlainPassword)), @RoleName, @Clearance);
+
+    INSERT INTO dbo.Users (Username, PasswordEnc, RoleName, ClearanceLevel)
+    VALUES (@Username,
+            EncryptByKey(Key_GUID('SRMS_AES_Key'), CONVERT(VARBINARY(200), @PlainPassword)),
+            @RoleName,
+            @Clearance);
+
     CLOSE SYMMETRIC KEY SRMS_AES_Key;
 END
 GO
 
-CREATE OR ALTER PROCEDURE dbo.usp_ValidateLogin
+
+CREATE OR ALTER PROCEDURE ValidateLogin
     @Username      NVARCHAR(50),
     @PlainPassword NVARCHAR(200)
 AS
@@ -190,26 +203,26 @@ BEGIN
     DECLARE @Decrypted NVARCHAR(200) = CONVERT(NVARCHAR(200), DecryptByKey(@Stored));
     CLOSE SYMMETRIC KEY SRMS_AES_Key;
     IF @Decrypted <> @PlainPassword THROW 50002, 'Invalid login.', 1;
-    SELECT Username, RoleName, ClearanceLevel FROM dbo.[Users] WHERE Username = @Username;
+    SELECT Username, RoleName, ClearanceLevel FROM dbo.Users WHERE Username = @Username;
 END
 GO
 
 -- Public Courses
-CREATE OR ALTER PROCEDURE dbo.usp_ViewPublicCourses @Username NVARCHAR(50)
+CREATE OR ALTER PROCEDURE ViewPublicCourses @Username NVARCHAR(50)
 AS
 BEGIN
-    IF dbo.fn_UserRole(@Username) IS NULL THROW 50003, 'Unknown user.', 1;
+    IF dbo.UserRole(@Username) IS NULL THROW 50003, 'Unknown user.', 1;
     SELECT CourseID, CourseName, PublicInfo FROM dbo.Course;
 END
 GO
 
 -- Student Profile (uses Email = Username)
-CREATE OR ALTER PROCEDURE dbo.usp_ViewOwnProfile @Username NVARCHAR(50)
+CREATE OR ALTER PROCEDURE ViewOwnProfile @Username NVARCHAR(50)
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @role NVARCHAR(20) = dbo.fn_UserRole(@Username);
-    DECLARE @clr  INT = dbo.fn_UserClearance(@Username);
+    DECLARE @role NVARCHAR(20) = dbo.UserRole(@Username);
+    DECLARE @clr  INT = dbo.UserClearance(@Username);
     IF @clr < 2 THROW 50004, 'MLS NRU: clearance < Confidential.', 1;
 
     OPEN SYMMETRIC KEY SRMS_AES_Key DECRYPTION BY CERTIFICATE SRMS_Cert;
@@ -239,7 +252,7 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE dbo.usp_EditOwnProfile
+CREATE OR ALTER PROCEDURE EditOwnProfile
     @Username NVARCHAR(50),
     @TargetEmail NVARCHAR(100),
     @FullName NVARCHAR(100),
@@ -247,8 +260,8 @@ CREATE OR ALTER PROCEDURE dbo.usp_EditOwnProfile
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @role NVARCHAR(20) = dbo.fn_UserRole(@Username);
-    DECLARE @clr  INT = dbo.fn_UserClearance(@Username);
+    DECLARE @role NVARCHAR(20) = dbo.UserRole(@Username);
+    DECLARE @clr  INT = dbo.UserClearance(@Username);
 
     IF @role NOT IN ('Admin','Instructor','TA') THROW 50006, 'Only Admin/Instructor/TA can edit.', 1;
     IF @clr > 2 THROW 50007, 'MLS NWD: cannot write to lower classification.', 1;
@@ -265,7 +278,7 @@ END
 GO
 
 -- Grades
-CREATE OR ALTER PROCEDURE dbo.usp_EnterOrUpdateGrade
+CREATE OR ALTER PROCEDURE EnterOrUpdateGrade
      @Username NVARCHAR(50),
     @StudentEmail NVARCHAR(100),
     @CourseID INT,
@@ -273,8 +286,8 @@ CREATE OR ALTER PROCEDURE dbo.usp_EnterOrUpdateGrade
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @role NVARCHAR(20) = dbo.fn_UserRole(@Username);
-    DECLARE @clr  INT = dbo.fn_UserClearance(@Username);
+    DECLARE @role NVARCHAR(20) = dbo.UserRole(@Username);
+    DECLARE @clr  INT = dbo.UserClearance(@Username);
     IF @role NOT IN ('Admin','Instructor') THROW 50008, 'Only Admin/Instructor can edit grades.', 1;
     IF @clr < 3 THROW 50009, 'MLS NRU: clearance < Secret.', 1;
     IF @clr > 3 THROW 50010, 'MLS NWD: cannot write down.', 1;
@@ -301,14 +314,14 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER PROCEDURE dbo.usp_ViewGrades
+CREATE OR ALTER PROCEDURE ViewGrades
         @Username NVARCHAR(50), 
         @StudentEmail NVARCHAR(100)
     AS
     BEGIN
         SET NOCOUNT ON;
-        DECLARE @role NVARCHAR(20) = dbo.fn_UserRole(@Username);
-        DECLARE @clr  INT = dbo.fn_UserClearance(@Username);
+        DECLARE @role NVARCHAR(20) = dbo.UserRole(@Username);
+        DECLARE @clr  INT = dbo.UserClearance(@Username);
         IF @role NOT IN ('Admin','Instructor') THROW 50011, 'Only Admin/Instructor can view grades.', 1;
         IF @clr < 3 THROW 50012, 'MLS NRU: clearance < Secret.', 1;
 
@@ -331,7 +344,7 @@ CREATE OR ALTER PROCEDURE dbo.usp_ViewGrades
     GO
 
 -- Attendance
-CREATE OR ALTER PROCEDURE dbo.usp_RecordAttendance
+CREATE OR ALTER PROCEDURE RecordAttendance
     @Username NVARCHAR(50),
     @StudentEmail NVARCHAR(100),
     @CourseID INT,
@@ -339,8 +352,8 @@ CREATE OR ALTER PROCEDURE dbo.usp_RecordAttendance
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @role NVARCHAR(20) = dbo.fn_UserRole(@Username);
-    DECLARE @clr  INT = dbo.fn_UserClearance(@Username);
+    DECLARE @role NVARCHAR(20) = dbo.UserRole(@Username);
+    DECLARE @clr  INT = dbo.UserClearance(@Username);
     IF @role NOT IN ('Admin','Instructor','TA') THROW 50013, 'Only Admin/Instructor/TA can edit attendance.', 1;
     IF @clr < 3 THROW 50014, 'MLS NRU: clearance < Secret.', 1;
     IF @clr > 3 THROW 50015, 'MLS NWD: cannot write down.', 1;
@@ -348,17 +361,17 @@ BEGIN
     DECLARE @StudentRefID INT = (SELECT SurrogateID FROM dbo.Student WHERE Email = @StudentEmail);
     IF @StudentRefID IS NULL THROW 50025, 'Student not found.', 1;
 
-    INSERT INTO dbo.Attendance(StudentRefID, CourseID, [Status], DateRecorded, RecordedBy)
+    INSERT INTO dbo.Attendance(StudentRefID, CourseID, Status, DateRecorded, RecordedBy)
     VALUES (@StudentRefID, @CourseID, @Status, GETDATE(), @Username);
 END
 GO
 
-CREATE OR ALTER PROCEDURE dbo.usp_ViewAttendance @Username NVARCHAR(50)
+CREATE OR ALTER PROCEDURE ViewAttendance @Username NVARCHAR(50)
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @role NVARCHAR(20) = dbo.fn_UserRole(@Username);
-    DECLARE @clr  INT = dbo.fn_UserClearance(@Username);
+    DECLARE @role NVARCHAR(20) = dbo.UserRole(@Username);
+    DECLARE @clr  INT = dbo.UserClearance(@Username);
     IF @clr < 3 THROW 50016, 'MLS NRU: clearance < Secret.', 1;
 
     OPEN SYMMETRIC KEY SRMS_AES_Key DECRYPTION BY CERTIFICATE SRMS_Cert;
@@ -373,7 +386,7 @@ BEGIN
     END
     ELSE IF @role = 'Student'
     BEGIN
-        DECLARE @MyRefID INT = dbo.fn_GetStudentSurrogateID(@Username);
+        DECLARE @MyRefID INT = dbo.GetStudentSurrogateID(@Username);
         IF @MyRefID IS NULL THROW 50017, 'Student record not found.', 1;
 
         SELECT 
@@ -391,14 +404,14 @@ END
 GO
 
 -- Admin: Manage Users
-CREATE OR ALTER PROCEDURE dbo.usp_UpdateUserRole
+CREATE OR ALTER PROCEDURE UpdateUserRole
     @AdminUser NVARCHAR(50),
     @TargetUser NVARCHAR(50),
     @NewRole NVARCHAR(20),
     @NewClearance INT
 AS
 BEGIN
-    IF dbo.fn_UserRole(@AdminUser) <> 'Admin' THROW 50019, 'Admin only.', 1;
+    IF dbo.UserRole(@AdminUser) <> 'Admin' THROW 50019, 'Admin only.', 1;
     UPDATE dbo.[Users] SET RoleName = @NewRole, ClearanceLevel = @NewClearance WHERE Username = @TargetUser;
 END
 GO
@@ -406,19 +419,19 @@ GO
 ---------------------------------------------------------------
 -- TASK 6: Inference Control (min group size = 3)
 ---------------------------------------------------------------
-CREATE OR ALTER VIEW dbo.vw_TA_Student_RestrictedStudent
+CREATE OR ALTER VIEW TA_Student_RestrictedStudent
 AS
 SELECT SurrogateID, FullName, Department FROM dbo.Student;
 GO
 
-CREATE OR ALTER PROCEDURE dbo.usp_AvgGradeByDepartment
+CREATE OR ALTER PROCEDURE AvgGradeByDepartment
     @Username NVARCHAR(50),
     @Department NVARCHAR(50)
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @role NVARCHAR(20) = dbo.fn_UserRole(@Username);
-    DECLARE @clr  INT = dbo.fn_UserClearance(@Username);
+    DECLARE @role NVARCHAR(20) = dbo.UserRole(@Username);
+    DECLARE @clr  INT = dbo.UserClearance(@Username);
     IF @role NOT IN ('Admin','Instructor') THROW 50020, 'Access denied.', 1;
     IF @clr < 3 THROW 50021, 'MLS NRU.', 1;
 
@@ -466,37 +479,44 @@ CREATE TABLE dbo.RoleRequests (
 );
 GO
 
-CREATE OR ALTER PROCEDURE dbo.usp_SubmitRoleUpgradeRequest
+CREATE OR ALTER PROCEDURE dbo.SubmitRoleUpgradeRequest
     @Username NVARCHAR(50),
     @RequestedRole NVARCHAR(20),
-    @Reason NVARCHAR(400),
-    @Comments NVARCHAR(400) = NULL
+    @Reason NVARCHAR(400)
 AS
 BEGIN
-    DECLARE @role NVARCHAR(20) = dbo.fn_UserRole(@Username);
-    IF @role NOT IN ('Student','TA') THROW 50030, 'Only Student/TA can submit.', 1;
-    INSERT INTO dbo.RoleRequests(Username, CurrentRole, RequestedRole, Reason, Comments, Status, DateSubmitted)
-    VALUES (@Username, @role, @RequestedRole, @Reason, @Comments, 'Pending', GETDATE());
+    SET NOCOUNT ON;
+
+    DECLARE @CurrentRole NVARCHAR(20) = dbo.UserRole(@Username);
+
+    IF @CurrentRole IS NULL
+        THROW 50050, 'User not found in dbo.Users (cannot determine CurrentRole).', 1;
+
+    INSERT INTO dbo.RoleRequests
+        (Username, CurrentRole, RequestedRole, Reason, Status, DateSubmitted)
+    VALUES
+        (@Username, @CurrentRole, @RequestedRole, @Reason, 'Pending', GETDATE());
 END
 GO
 
-CREATE OR ALTER PROCEDURE dbo.usp_ListPendingRoleRequests @AdminUser NVARCHAR(50)
+
+CREATE OR ALTER PROCEDURE ListPendingRoleRequests @AdminUser NVARCHAR(50)
 AS
 BEGIN
-    IF dbo.fn_UserRole(@AdminUser) <> 'Admin' THROW 50031, 'Admin only.', 1;
+    IF dbo.UserRole(@AdminUser) <> 'Admin' THROW 50031, 'Admin only.', 1;
     SELECT RequestID, Username, CurrentRole, RequestedRole, Reason, DateSubmitted, Status
     FROM dbo.RoleRequests WHERE Status = 'Pending' ORDER BY DateSubmitted;
 END
 GO
 
-CREATE OR ALTER PROCEDURE dbo.usp_ResolveRoleRequest
+CREATE OR ALTER PROCEDURE ResolveRoleRequest
     @AdminUser NVARCHAR(50),
     @RequestID INT,
     @Action NVARCHAR(10),
     @NewClearance INT = NULL
 AS
 BEGIN
-    IF dbo.fn_UserRole(@AdminUser) <> 'Admin' THROW 50032, 'Admin only.', 1;
+    IF dbo.UserRole(@AdminUser) <> 'Admin' THROW 50032, 'Admin only.', 1;
     DECLARE @Username NVARCHAR(50), @RequestedRole NVARCHAR(20), @CurrentStatus NVARCHAR(20);
     SELECT @Username = Username, @RequestedRole = RequestedRole, @CurrentStatus = Status
     FROM dbo.RoleRequests WHERE RequestID = @RequestID;
@@ -521,31 +541,31 @@ GO
 -- TASK 10: Grant EXECUTE Permissions
 ---------------------------------------------------------------
 -- Public
-GRANT EXECUTE ON dbo.usp_ViewPublicCourses TO [Guest], [Student], [TA], [Instructor], [Admin];
+GRANT EXECUTE ON ViewPublicCourses TO [Guest], [Student], [TA], [Instructor], [Admin];
 
 -- Profile
-GRANT EXECUTE ON dbo.usp_ViewOwnProfile TO [Student], [TA], [Instructor], [Admin];
-GRANT EXECUTE ON dbo.usp_EditOwnProfile TO [TA], [Instructor], [Admin];
+GRANT EXECUTE ON ViewOwnProfile TO [Student], [TA], [Instructor], [Admin];
+GRANT EXECUTE ON EditOwnProfile TO [TA], [Instructor], [Admin];
 
 -- Grades
-GRANT EXECUTE ON dbo.usp_ViewGrades TO [Admin], [Instructor];
-GRANT EXECUTE ON dbo.usp_EnterOrUpdateGrade TO [Admin], [Instructor];
+GRANT EXECUTE ON ViewGrades TO [Admin], [Instructor];
+GRANT EXECUTE ON EnterOrUpdateGrade TO [Admin], [Instructor];
 
 -- Attendance
-GRANT EXECUTE ON dbo.usp_RecordAttendance TO [Admin], [Instructor], [TA];
-GRANT EXECUTE ON dbo.usp_ViewAttendance TO [Admin], [Instructor], [TA], [Student];
+GRANT EXECUTE ON RecordAttendance TO [Admin], [Instructor], [TA];
+GRANT EXECUTE ON ViewAttendance TO [Admin], [Instructor], [TA], [Student];
 
 -- Admin
-GRANT EXECUTE ON dbo.usp_CreateUser TO [Admin];
-GRANT EXECUTE ON dbo.usp_UpdateUserRole TO [Admin];
-GRANT EXECUTE ON dbo.usp_ListPendingRoleRequests TO [Admin];
-GRANT EXECUTE ON dbo.usp_ResolveRoleRequest TO [Admin];
+GRANT EXECUTE ON CreateUser TO [Admin];
+GRANT EXECUTE ON UpdateUserRole TO [Admin];
+GRANT EXECUTE ON ListPendingRoleRequests TO [Admin];
+GRANT EXECUTE ON ResolveRoleRequest TO [Admin];
 
 -- Inference
-GRANT EXECUTE ON dbo.usp_AvgGradeByDepartment TO [Admin], [Instructor];
+GRANT EXECUTE ON AvgGradeByDepartment TO [Admin], [Instructor];
 
 -- Role Requests
-GRANT EXECUTE ON dbo.usp_SubmitRoleUpgradeRequest TO [Student], [TA];
+GRANT EXECUTE ON SubmitRoleUpgradeRequest TO [Student], [TA];
 GO
 
 ---------------------------------------------------------------
@@ -635,32 +655,32 @@ SELECT * FROM Student;
 
 
 
-EXEC usp_ValidateLogin @Username = 'stud1@nu.edu', @PlainPassword = 'studpass';
+EXEC ValidateLogin @Username = 'stud1@nu.edu', @PlainPassword = 'studpass';
  
 
-EXEC usp_ValidateLogin @Username = 'admin1', @PlainPassword = 'adminpass';
+EXEC ValidateLogin @Username = 'admin1', @PlainPassword = 'adminpass';
 
  ----Student views own profile
-EXEC usp_ViewOwnProfile @Username = 'stud1@nu.edu';
+EXEC ViewOwnProfile @Username = 'stud1@nu.edu';
 
 ---Student tries to view grades will fail
-EXEC usp_ViewGrades @Username = 'stud1@nu.edu', @StudentEmail = 'stud1@nu.edu';
+EXEC ViewGrades @Username = 'stud1@nu.edu', @StudentEmail = 'stud1@nu.edu';
 
 ---- Instructor enters a grade
-EXEC usp_EnterOrUpdateGrade 
+EXEC EnterOrUpdateGrade 
     @Username = 'inst1', 
     @StudentEmail = 'stud1@nu.edu', 
     @CourseID = 101, 
     @GradeValue = 92.5;
 
 ----Instructor views that grade
-EXEC usp_ViewGrades @Username = 'inst1', @StudentEmail = 'stud1@nu.edu';
+EXEC ViewGrades @Username = 'inst1', @StudentEmail = 'stud1@nu.edu';
  
 ----Student views own attendance
-EXEC usp_ViewAttendance @Username = 'stud1@nu.edu';
+EXEC ViewAttendance @Username = 'stud1@nu.edu';
 
 -----TA records attendance
-EXEC usp_RecordAttendance 
+EXEC RecordAttendance 
     @Username = 'ta1', 
     @StudentEmail = 'stud1@nu.edu', 
     @CourseID = 101, 
@@ -668,21 +688,21 @@ EXEC usp_RecordAttendance
 
     ----Guest views public courses  
 
-    EXEC usp_ViewPublicCourses @Username = 'guest1';
+    EXEC ViewPublicCourses @Username = 'guest1';
 
     -----Student submits role upgrade request
-    EXEC usp_SubmitRoleUpgradeRequest 
+    EXEC SubmitRoleUpgradeRequest 
     @Username = 'stud1@nu.edu', 
     @RequestedRole = 'TA', 
     @Reason = 'I am now a teaching assistant.';
 
 
     -----Admin sees pending request
-    EXEC usp_ListPendingRoleRequests @AdminUser = 'admin1';
+    EXEC ListPendingRoleRequests @AdminUser = 'admin1';
 
     -- First, get the RequestID (look at the output from step 10 — probably 1)
 -- Then run:
-EXEC usp_ResolveRoleRequest 
+EXEC ResolveRoleRequest 
     @AdminUser = 'admin1', 
     @RequestID = 3, 
     @Action = 'Approve', 
@@ -697,4 +717,9 @@ SELECT Username, RoleName FROM dbo.Users WHERE Username = 'stud1@nu.edu';
 -- Put student in a unique department
 UPDATE dbo.Student SET Department = 'SoloDept' WHERE Email = 'stud1@nu.edu';
 --  get average grade only 1 student
-EXEC usp_AvgGradeByDepartment @Username = 'admin1', @Department = 'SoloDept';
+EXEC AvgGradeByDepartment @Username = 'admin1', @Department = 'SoloDept';
+/*-------------------------------------------------------------------*/
+
+
+
+
