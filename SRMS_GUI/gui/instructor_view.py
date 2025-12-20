@@ -70,7 +70,7 @@ class InstructorView:
         try:
             enter_or_update_grade(
                 Session.username,
-                int(self.g_student.get()),
+                self.g_student.get(),
                 int(self.g_course.get()),
                 float(self.g_grade.get())
             )
@@ -85,7 +85,7 @@ class InstructorView:
 
             rows = view_grades(
                 Session.username,
-                int(self.g_student.get())
+                self.g_student.get()
             )
 
             for r in rows:
@@ -104,7 +104,7 @@ class InstructorView:
         form = tk.Frame(tab)
         form.pack(pady=10)
 
-        tk.Label(form, text="Student ID").grid(row=0, column=0)
+        tk.Label(form, text="Student Username").grid(row=0, column=0)
         self.a_student = tk.Entry(form)
         self.a_student.grid(row=0, column=1)
 
@@ -130,7 +130,7 @@ class InstructorView:
 
             rows = view_attendance(
                 Session.username,
-                int(self.a_student.get())
+                # str(self.a_student.get())
             )
 
             for r in rows:
