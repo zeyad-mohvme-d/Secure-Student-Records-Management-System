@@ -583,6 +583,9 @@ INSERT INTO dbo.[Users] VALUES
 ('stud1@nu.edu', EncryptByKey(Key_GUID('SRMS_AES_Key'), N'studpass'), 'Student', 2),
 ('guest1', EncryptByKey(Key_GUID('SRMS_AES_Key'), N'guestpass'), 'Guest', 1);
 
+
+
+
 CLOSE SYMMETRIC KEY SRMS_AES_Key;
 
 
@@ -685,6 +688,13 @@ EXEC RecordAttendance
     @StudentEmail = 'stud1@nu.edu', 
     @CourseID = 101, 
     @Status = 1;
+
+EXEC RecordAttendance 
+    @Username = 'ta1', 
+    @StudentEmail = 'Sadek', 
+    @CourseID = 101, 
+    @Status = 1;
+
 
     ----Guest views public courses  
 
