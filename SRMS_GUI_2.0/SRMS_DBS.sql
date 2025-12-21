@@ -410,9 +410,7 @@ GO
 
 CREATE OR ALTER PROCEDURE EditOwnProfile
     @Username NVARCHAR(50),
-    @TargetEmail NVARCHAR(100),
-    @FullName NVARCHAR(100),
-    @Phone NVARCHAR(20)
+    @NewFullName NVARCHAR(100)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -424,22 +422,14 @@ BEGIN
     IF @role NOT IN ('Admin','Instructor','TA')
         THROW 50006, 'Only Admin/Instructor/TA can edit profile.', 1;
 
-    -- Admin edits ONLY his own record
-    IF @Username <> @TargetEmail
-        THROW 50008, 'You can only edit your own profile.', 1;
-
     OPEN SYMMETRIC KEY SRMS_AES_Key
         DECRYPTION BY CERTIFICATE SRMS_Cert;
 
     UPDATE dbo.Student
-    SET
-        FullName = @FullName,
-        PhoneEnc = EncryptByKey(
-            Key_GUID('SRMS_AES_Key'),
-            CONVERT(VARBINARY(20), @Phone)
-        ),
-        ClearanceLevel = @clr   -- MLS FIX
-    WHERE Email = @TargetEmail;
+    SET 
+        FullName = @NewFullName,
+        ClearanceLevel = @clr   -- MLS-safe
+    WHERE Email = @Username;
 
     CLOSE SYMMETRIC KEY SRMS_AES_Key;
 END
@@ -1099,6 +1089,23 @@ EXEC ListPendingRoleRequests
 
 EXEC ListPendingRoleRequests
     @AdminUser='inst1';
+
+-- EditOwnProfile
+-- Admin/TA edits his own profile (SUCCESS)
+EXEC EditOwnProfile
+    @Username = 'admin1',
+    @NewFullName = 'Ahmed Admin';
+
+EXEC EditOwnProfile
+    @Username = 'ta1',
+    @NewFullName = 'Zeyad';
+
+-- Student tries to edit profile (FAILs – expected)
+EXEC EditOwnProfile
+    @Username = 'stud1@nu.edu',
+    @NewFullName = 'Hacker Student';
+
+
 
 -- RequestID must be read from previous SELECT output
 EXEC ResolveRoleRequest

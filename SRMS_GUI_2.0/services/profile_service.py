@@ -30,9 +30,8 @@ def view_profile(username):
 
 def edit_own_profile(username):
     full_name = simpledialog.askstring("Edit Profile", "New Full Name:")
-    phone = simpledialog.askstring("Edit Profile", "New Phone Number:")
 
-    if not full_name or not phone:
+    if not full_name:
         return
 
     try:
@@ -40,8 +39,8 @@ def edit_own_profile(username):
         cursor = conn.cursor()
 
         cursor.execute(
-            "EXEC EditOwnProfile ?, ?, ?, ?",
-            username, username, full_name, phone
+            "EXEC EditOwnProfile ?, ?",
+            username, full_name
         )
         conn.commit()
 
